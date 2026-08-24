@@ -34,14 +34,20 @@ resource "aws_ses_domain_dkim" "this" {
   domain = aws_ses_domain_identity.this.domain
 }
 
+# SES always issues exactly 3 DKIM tokens for a domain identity, but their
+# values aren't known until apply -- for_each can't iterate an apply-time
+# list directly (Terraform can't determine the resulting instance keys
+# during plan). Iterating over static indices instead, and indexing into
+# the token list per record, sidesteps that: the *keys* are known at plan
+# time even though the *values* aren't.
 resource "aws_route53_record" "dkim" {
-  for_each = toset(aws_ses_domain_dkim.this.dkim_tokens)
+  for_each = toset(["0", "1", "2"])
 
   zone_id = var.route53_zone_id
-  name    = "${each.value}._domainkey.${var.domain_name}"
+  name    = "${aws_ses_domain_dkim.this.dkim_tokens[tonumber(each.value)]}._domainkey.${var.domain_name}"
   type    = "CNAME"
   ttl     = 600
-  records = ["${each.value}.dkim.amazonses.com"]
+  records = ["${aws_ses_domain_dkim.this.dkim_tokens[tonumber(each.value)]}.dkim.amazonses.com"]
 }
 
 # Verifies the recipient. Staying in SES's sandbox is sufficient for one
