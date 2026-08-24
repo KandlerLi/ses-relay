@@ -68,6 +68,7 @@ derivation needed).
 
 ```bash
 export TF_VAR_alert_email="you@example.com"
+export TF_VAR_route53_zone_id="Z07879811I86VC8PAL8HX"
 terraform init
 terraform plan
 terraform apply
