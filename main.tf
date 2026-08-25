@@ -72,14 +72,24 @@ resource "aws_iam_user_policy" "smtp" {
   name = "send-from-verified-domain"
   user = aws_iam_user.smtp.name
 
+  # SES's IAM authorization for SendRawEmail/SendEmail checks the caller
+  # against every identity involved in the send, not just the sending
+  # domain -- since the recipient is also a verified identity in this same
+  # account (required for SES sandbox delivery), a policy scoped to only
+  # the domain identity gets denied with "not authorized ... on resource
+  # identity/<recipient>". Confirmed live: the recipient identity ARN had
+  # to be added here before mail actually sent.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "SendFromVerifiedDomain"
-        Effect   = "Allow"
-        Action   = ["ses:SendRawEmail", "ses:SendEmail"]
-        Resource = aws_ses_domain_identity.this.arn
+        Sid    = "SendFromVerifiedDomain"
+        Effect = "Allow"
+        Action = ["ses:SendRawEmail", "ses:SendEmail"]
+        Resource = [
+          aws_ses_domain_identity.this.arn,
+          aws_ses_email_identity.recipient.arn,
+        ]
       },
     ]
   })
