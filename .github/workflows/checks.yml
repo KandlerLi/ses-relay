@@ -44,6 +44,7 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --network host
 
     steps:
       - name: Check out repository
@@ -58,6 +59,10 @@ jobs:
       - name: Validate Terraform
         run: terraform validate
 
+      - name: Fix workspace permissions for the next job
+        if: always()
+        run: chmod -R a+rwX "$GITHUB_WORKSPACE"
+
   plan:
     name: Terraform plan
     if: >-
@@ -71,6 +76,7 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      options: --network host
     permissions:
       contents: read
       id-token: write
@@ -123,3 +129,6 @@ jobs:
 
       - name: Create speculative plan
         run: terraform plan -input=false -lock=false -no-color
+      - name: Fix workspace permissions for the next job
+        if: always()
+        run: chmod -R a+rwX "$GITHUB_WORKSPACE"
