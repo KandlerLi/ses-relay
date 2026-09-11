@@ -101,4 +101,16 @@ resource "aws_iam_user_policy" "smtp" {
 # and why that derivation deliberately happens outside Terraform state.
 resource "aws_iam_access_key" "smtp" {
   user = aws_iam_user.smtp.name
+
+  # create_before_destroy so a future `terraform apply
+  # -replace=aws_iam_access_key.smtp` (the actual rotation mechanic --
+  # this resource has no in-place rotation, only destroy+recreate)
+  # mints the new key before deleting the old one. IAM permits up to 2
+  # access keys per user, so this gives a real overlap window instead
+  # of a moment with zero valid key while Alertmanager/Authelia could
+  # be mid-send. Same fix as aws/dyndns's acme_dns01 access key
+  # (2026-09-11), applied here for the same reason.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
