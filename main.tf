@@ -68,9 +68,24 @@ resource "aws_iam_user" "smtp" {
   }
 }
 
-resource "aws_iam_user_policy" "smtp" {
-  name = "send-from-verified-domain"
-  user = aws_iam_user.smtp.name
+#trivy:ignore:AVD-AWS-0123
+resource "aws_iam_group" "smtp" {
+  # Fixes trivy's AWS-0143 (policy attached directly to a user) --
+  # ses-relay-smtp is a single machine credential (SMTP access key), not
+  # a human console user, so this group will only ever have this one
+  # member; the indirection is cheap and clears the finding without
+  # changing the effective permissions.
+  #
+  # AWS-0123 (MFA not enforced) suppressed too: this identity has no
+  # console password or login profile, only the access key doubling as
+  # its SMTP username -- MFA has no session to attach a condition to for
+  # that kind of auth.
+  name = "ses-relay-smtp"
+}
+
+resource "aws_iam_group_policy" "smtp" {
+  name  = "send-from-verified-domain"
+  group = aws_iam_group.smtp.name
 
   # SES's IAM authorization for SendRawEmail/SendEmail checks the caller
   # against every identity involved in the send, not just the sending
@@ -93,6 +108,12 @@ resource "aws_iam_user_policy" "smtp" {
       },
     ]
   })
+}
+
+resource "aws_iam_group_membership" "smtp" {
+  name  = "ses-relay-smtp-members"
+  group = aws_iam_group.smtp.name
+  users = [aws_iam_user.smtp.name]
 }
 
 # The access key ID doubles as the SMTP username, used as-is. The secret
