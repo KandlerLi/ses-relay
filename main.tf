@@ -135,3 +135,39 @@ resource "aws_iam_access_key" "smtp" {
     create_before_destroy = true
   }
 }
+
+# Inbound and authentication DNS for the k3s-native Stalwart mail server
+# (infra/k3s-apps' modules/stalwart), kept here beside the SES records
+# because the SPF policy has to include SES.
+#
+# The MX target is the apex, not mail.<domain>: mail.<domain> is a CNAME
+# (aws/dyndns's subdomains), and an MX must not point at a CNAME. The
+# apex A record is the one dyndns keeps current with the home IP.
+resource "aws_route53_record" "mx" {
+  zone_id = var.route53_zone_id
+  name    = var.domain_name
+  type    = "MX"
+  ttl     = 600
+  records = ["10 ${var.domain_name}."]
+}
+
+# Outbound mail goes through SES; a:mail.<domain> also covers anything the
+# homeserver sends directly (its A record follows the dynamic IP).
+# Soft-fail for now -- tighten to -all once real mail has flowed cleanly.
+resource "aws_route53_record" "spf" {
+  zone_id = var.route53_zone_id
+  name    = var.domain_name
+  type    = "TXT"
+  ttl     = 600
+  records = ["v=spf1 a:mail.${var.domain_name} include:amazonses.com ~all"]
+}
+
+# Monitor-only (p=none) to start: reports go to the mailbox itself, and
+# the policy is raised to quarantine/reject once they look clean.
+resource "aws_route53_record" "dmarc" {
+  zone_id = var.route53_zone_id
+  name    = "_dmarc.${var.domain_name}"
+  type    = "TXT"
+  ttl     = 600
+  records = ["v=DMARC1; p=none; rua=mailto:julian@${var.domain_name}"]
+}
