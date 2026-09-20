@@ -1,8 +1,13 @@
-# SES relay for homeserver alerting
+# SES relay for jkandler.de
 
-Terraform for an AWS SES sending identity used only to relay monitoring
-alert emails from `infra/home-infra`'s `monitoring` role (Prometheus/
-Grafana/Alertmanager) to `julian.kandler@outlook.com`.
+Terraform for an AWS SES sending identity for `jkandler.de`, originally
+built to relay monitoring alert emails from `infra/home-infra`'s
+`monitoring` role (Prometheus/Grafana/Alertmanager) to
+`julian.kandler@outlook.com`. The same domain identity and IAM
+credential are now also reused by Authelia (password-reset mail) and by
+the Stalwart mail server (`infra/k3s-apps`' `modules/stalwart`) as its
+outbound smart host, configured directly in Stalwart's own admin UI --
+see "Stalwart's outbound relay" below.
 
 ## Why this exists
 
@@ -23,11 +28,44 @@ even though it can no longer relay *through* Outlook's own SMTP.
 - `aws_ses_domain_dkim` + three `aws_route53_record` (CNAME) entries:
   DKIM signing, for deliverability.
 - `aws_ses_email_identity` for `julian.kandler@outlook.com` (the
-  recipient). Staying in SES's sandbox is sufficient for one personal
-  recipient -- no production-access request needed.
+  recipient). Staying in SES's sandbox was sufficient while this
+  account only ever sent to that one personal recipient -- see
+  "Stalwart's outbound relay" below for why that's no longer true.
 - An IAM user scoped only to `ses:SendRawEmail`/`ses:SendEmail` from this
   one verified domain identity, with an access key Terraform generates
-  for it.
+  for it. The policy authorizes sending as *any* address on the
+  `jkandler.de` domain identity (`alerts@`, `julian@`, `info@`, ...),
+  not just the one address Alertmanager happens to send as -- there is
+  deliberately no per-mailbox IAM scoping.
+
+## Stalwart's outbound relay
+
+Stalwart (`infra/k3s-apps`' `modules/stalwart`) relays all outbound mail
+through this same SES SMTP endpoint and credential, rather than
+delivering directly from the k3s VM's own IP -- a fresh IP with zero
+sending history would get flagged as spam almost everywhere. This is
+configured directly in Stalwart's admin UI (`Settings -> SMTP ->
+Outbound -> Relay Hosts`, plus a routing rule and disabling DANE/MTA-STS
+enforcement for the relay under `Settings -> SMTP -> Outbound`), not in
+this repo or in `infra/k3s-apps` -- Stalwart stores this kind of runtime
+setting in its own database, the same as the CORS and IP-allow-list
+settings already documented in its own runbook. As with those, a
+setting change here needs a Stalwart Pod restart to take effect.
+
+**This is why SES's sandbox mode now matters.** In sandbox mode SES only
+delivers to identities verified in this same account (why
+`aws_ses_email_identity.recipient` exists at all) -- fine for
+Alertmanager/Authelia, which only ever send to `julian.kandler@
+outlook.com`, but Stalwart needs to send to arbitrary external
+addresses. Production access removes that restriction; it does not
+change anything this repo manages (still `ses:SendRawEmail`/
+`ses:SendEmail` from a single verified domain, same as
+today) and cannot be requested through Terraform or the CLI -- it's an
+AWS Support case with human review, requested once from the SES console
+(*Account dashboard -> Request production access*), typically decided
+within a day. Until it's approved, only mail to already-verified
+recipients (`julian.kandler@outlook.com`) can be used to test the
+relay.
 
 ## One thing Terraform can't finish: the SNS-style manual step
 
