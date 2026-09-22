@@ -52,20 +52,26 @@ setting in its own database, the same as the CORS and IP-allow-list
 settings already documented in its own runbook. As with those, a
 setting change here needs a Stalwart Pod restart to take effect.
 
-**This is why SES's sandbox mode now matters.** In sandbox mode SES only
-delivers to identities verified in this same account (why
+**Why SES's sandbox mattered, and its current state.** In sandbox mode
+SES only delivers to identities verified in this same account (why
 `aws_ses_email_identity.recipient` exists at all) -- fine for
 Alertmanager/Authelia, which only ever send to `julian.kandler@
 outlook.com`, but Stalwart needs to send to arbitrary external
-addresses. Production access removes that restriction; it does not
-change anything this repo manages (still `ses:SendRawEmail`/
-`ses:SendEmail` from a single verified domain, same as
-today) and cannot be requested through Terraform or the CLI -- it's an
-AWS Support case with human review, requested once from the SES console
-(*Account dashboard -> Request production access*), typically decided
-within a day. Until it's approved, only mail to already-verified
-recipients (`julian.kandler@outlook.com`) can be used to test the
-relay.
+addresses. **Production access was granted 2026-09-21** (AWS Support
+case 178988954600742): out of the sandbox in eu-central-1, 50,000
+messages/day, 14 messages/second. Granting it changed nothing this
+repo manages (still `ses:SendRawEmail`/`ses:SendEmail` from a single
+verified domain) and it can't be requested through Terraform or the
+CLI -- it's an AWS Support case with human review, requested once from
+the SES console (*Account dashboard -> Request production access*).
+The account is expected to keep a bounce/complaint handling process;
+watch those rates in the SES console. Until a real send to a
+non-verified recipient has been confirmed, treat "arbitrary recipients
+work" as granted-but-unproven.
+
+`aws_ses_email_identity.recipient` is now unnecessary for delivery but
+harmless; it stays in place rather than being removed in the same
+change as this doc update.
 
 ## One thing Terraform can't finish: the SNS-style manual step
 
