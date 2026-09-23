@@ -1,13 +1,11 @@
 variable "aws_region" {
   description = "AWS region in which to configure SES"
   type        = string
-  default     = "eu-central-1"
 }
 
 variable "domain_name" {
   description = "Domain to verify as an SES sending identity (mail goes out as alerts@<domain_name>)"
   type        = string
-  default     = "jkandler.de"
 
   validation {
     condition = length(var.domain_name) <= 253 && length(split(".", var.domain_name)) >= 2 && alltrue([
@@ -27,10 +25,6 @@ variable "route53_zone_id" {
   }
 }
 
-# No default: this repo is public, so the address isn't committed to git
-# history -- same pattern as aws-budget/homeserver-health-check's own
-# alert_email. Supplied via TF_VAR_alert_email, sourced from this
-# repository's own ALERT_EMAIL GitHub Actions variable.
 variable "alert_email" {
   description = "Recipient address SES verifies and Alertmanager sends monitoring alerts to"
   type        = string
@@ -39,8 +33,4 @@ variable "alert_email" {
 variable "tags" {
   description = "Tags applied to supported AWS resources"
   type        = map(string)
-  default = {
-    ManagedBy = "Terraform"
-    Project   = "ses-relay"
-  }
 }
