@@ -106,13 +106,12 @@ resource "aws_route53_record" "mx" {
   records = ["10 ${var.domain_name}."]
 }
 
-# Soft-fail until real mail has flowed cleanly: see README, "Mail DNS for Stalwart".
 resource "aws_route53_record" "spf" {
   zone_id = var.route53_zone_id
   name    = var.domain_name
   type    = "TXT"
   ttl     = 600
-  records = ["v=spf1 a:mail.${var.domain_name} include:amazonses.com ~all"]
+  records = ["v=spf1 a:mail.${var.domain_name} include:amazonses.com -all"]
 }
 
 # Monitor-only for now: see README, "Mail DNS for Stalwart".
