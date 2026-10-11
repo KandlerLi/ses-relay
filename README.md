@@ -1,11 +1,11 @@
 # SES relay for jkandler.de
 
 Terraform for an AWS SES sending identity for `jkandler.de`, originally
-built to relay monitoring alert emails from `infra/home-infra`'s
+built to relay monitoring alert emails from [`home-infra`](https://github.com/KandlerLi/home-infra)'s
 `monitoring` role (Prometheus/Grafana/Alertmanager) to
 `julian.kandler@outlook.com`. The same domain identity and IAM
 credential are now also reused by Authelia (password-reset mail) and by
-the Stalwart mail server (`infra/k3s-apps`' `modules/stalwart`) as its
+the Stalwart mail server ([`k3s-apps`](https://github.com/KandlerLi/k3s-apps)' `modules/stalwart`) as its
 outbound smart host, configured directly in Stalwart's own admin UI --
 see "Stalwart's outbound relay" below.
 
@@ -40,14 +40,14 @@ even though it can no longer relay *through* Outlook's own SMTP.
 
 ## Stalwart's outbound relay
 
-Stalwart (`infra/k3s-apps`' `modules/stalwart`) relays all outbound mail
+Stalwart ([`k3s-apps`](https://github.com/KandlerLi/k3s-apps)' `modules/stalwart`) relays all outbound mail
 through this same SES SMTP endpoint and credential, rather than
 delivering directly from the k3s VM's own IP -- a fresh IP with zero
 sending history would get flagged as spam almost everywhere. This is
 configured directly in Stalwart's admin UI (`Settings -> SMTP ->
 Outbound -> Relay Hosts`, plus a routing rule and disabling DANE/MTA-STS
 enforcement for the relay under `Settings -> SMTP -> Outbound`), not in
-this repo or in `infra/k3s-apps` -- Stalwart stores this kind of runtime
+this repo or in [`k3s-apps`](https://github.com/KandlerLi/k3s-apps) -- Stalwart stores this kind of runtime
 setting in its own database, the same as the CORS and IP-allow-list
 settings already documented in its own runbook. As with those, a
 setting change here needs a Stalwart Pod restart to take effect.
