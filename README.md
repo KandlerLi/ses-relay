@@ -118,24 +118,28 @@ would put the actual, usable SMTP password in Terraform state, on top of
 the raw IAM secret key that's already there. Instead:
 
 ```bash
-terraform output -raw smtp_secret_access_key > /tmp/ses-secret-key
-python3 scripts/derive_smtp_password.py "$(cat /tmp/ses-secret-key)" eu-central-1
-rm /tmp/ses-secret-key
+python3 scripts/derive_smtp_password.py "$(terraform output -raw smtp_secret_access_key)" eu-central-1
 ```
 
-Copy the result into SOPS as `monitoring_ses_smtp_password` in
-`home-infra`, alongside `monitoring_ses_smtp_username` (this repo's
-`smtp_username` output -- the IAM access key ID itself, used as-is, no
-derivation needed).
+Store the result as `monitoring_ses_smtp_password` in the AWS Secrets
+Manager secret `home-infra/monitoring`, alongside
+`monitoring_ses_smtp_username` (this repo's `smtp_username` output -- the
+IAM access key ID itself, used as-is, no derivation needed). A
+`terraform apply` in [`k3s-apps`](https://github.com/KandlerLi/k3s-apps)
+then rolls Alertmanager and Authelia onto the new credentials. Stalwart's
+relay credential is set separately in its admin UI. The full rotation
+procedure, including a real SMTP login and send to verify it:
+[`secrets-manager`'s `home-infra/monitoring` runbook](https://github.com/KandlerLi/secrets-manager/blob/main/runbooks/home-infra/monitoring.md).
 
 ## Rotating the access key
 
 `aws_iam_access_key` has no in-place rotation, only destroy and
 recreate, so rotation is `terraform apply -replace=aws_iam_access_key.smtp`.
 `create_before_destroy` makes that mint the new key before deleting the
-old one (IAM allows two keys per user), so Alertmanager, Authelia and
-Stalwart never see a moment without a valid key. Same pattern as
-`dyndns`' ACME DNS-01 key.
+old one (IAM allows two keys per user), so IAM never has a moment
+without a valid key. Same pattern as `dyndns`' ACME DNS-01 key. The
+consumers still need the new credentials afterwards, see "Deriving the
+SMTP password" below, and Stalwart's relay credential in its admin UI.
 
 ## Prerequisites
 
