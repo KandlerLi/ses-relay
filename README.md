@@ -53,8 +53,7 @@ records, because the SPF policy has to include SES.
   subdomains) and an MX must not point at a CNAME. The apex A record is
   the one `dyndns` keeps current with the home IP.
 - **SPF** allows SES (outbound relay) and `a:mail.jkandler.de` (anything
-  the homeserver sends directly). It soft-fails (`~all`) for now; tighten
-  to `-all` once real mail has flowed cleanly.
+  the homeserver sends directly), and hard-fails (`-all`) everything else.
 - **DMARC** is monitor-only (`p=none`), reports go to the mailbox itself.
   Raise it to quarantine/reject once the reports look clean.
 
