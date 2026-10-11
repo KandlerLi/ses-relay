@@ -36,7 +36,35 @@ even though it can no longer relay *through* Outlook's own SMTP.
   for it. The policy authorizes sending as *any* address on the
   `jkandler.de` domain identity (`alerts@`, `julian@`, `info@`, ...),
   not just the one address Alertmanager happens to send as -- there is
-  deliberately no per-mailbox IAM scoping.
+  deliberately no per-mailbox IAM scoping. The policy also lists the
+  verified recipient identity: SES authorizes a send against every
+  identity involved, and a policy scoped to the domain alone was denied
+  live with "not authorized ... on resource identity/<recipient>".
+- `MX`, `SPF` and `DMARC` records for the Stalwart mail server, see
+  "Mail DNS for Stalwart" below.
+
+## Mail DNS for Stalwart
+
+Inbound and authentication DNS for Stalwart lives here, beside the SES
+records, because the SPF policy has to include SES.
+
+- **MX** points at the apex `jkandler.de`, not `mail.jkandler.de`:
+  `mail.` is a CNAME ([`dyndns`](https://github.com/KandlerLi/dyndns)'s
+  subdomains) and an MX must not point at a CNAME. The apex A record is
+  the one `dyndns` keeps current with the home IP.
+- **SPF** allows SES (outbound relay) and `a:mail.jkandler.de` (anything
+  the homeserver sends directly). It soft-fails (`~all`) for now; tighten
+  to `-all` once real mail has flowed cleanly.
+- **DMARC** is monitor-only (`p=none`), reports go to the mailbox itself.
+  Raise it to quarantine/reject once the reports look clean.
+
+## Security scan exceptions
+
+The IAM user sits in a single-member group so the send policy isn't
+attached to a user directly (trivy AWS-0143). AWS-0123 (MFA not
+enforced) is suppressed on that group: the identity has no console
+password or login profile, only the access key that doubles as its
+SMTP username, so there is no session an MFA condition could attach to.
 
 ## Stalwart's outbound relay
 
@@ -99,6 +127,15 @@ Copy the result into SOPS as `monitoring_ses_smtp_password` in
 `home-infra`, alongside `monitoring_ses_smtp_username` (this repo's
 `smtp_username` output -- the IAM access key ID itself, used as-is, no
 derivation needed).
+
+## Rotating the access key
+
+`aws_iam_access_key` has no in-place rotation, only destroy and
+recreate, so rotation is `terraform apply -replace=aws_iam_access_key.smtp`.
+`create_before_destroy` makes that mint the new key before deleting the
+old one (IAM allows two keys per user), so Alertmanager, Authelia and
+Stalwart never see a moment without a valid key. Same pattern as
+`dyndns`' ACME DNS-01 key.
 
 ## Prerequisites
 

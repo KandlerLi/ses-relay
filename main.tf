@@ -22,9 +22,6 @@ resource "aws_route53_record" "ses_verification" {
   records = [aws_ses_domain_identity.this.verification_token]
 }
 
-# Blocks until AWS actually confirms the TXT record above, so a later
-# terraform apply against the identity (or anything depending on it)
-# never races ahead of real verification.
 resource "aws_ses_domain_identity_verification" "this" {
   domain     = aws_ses_domain_identity.this.id
   depends_on = [aws_route53_record.ses_verification]
@@ -34,12 +31,7 @@ resource "aws_ses_domain_dkim" "this" {
   domain = aws_ses_domain_identity.this.domain
 }
 
-# SES always issues exactly 3 DKIM tokens for a domain identity, but their
-# values aren't known until apply -- for_each can't iterate an apply-time
-# list directly (Terraform can't determine the resulting instance keys
-# during plan). Iterating over static indices instead, and indexing into
-# the token list per record, sidesteps that: the *keys* are known at plan
-# time even though the *values* aren't.
+# Static keys: SES always issues 3 DKIM tokens, but their values are only known after apply.
 resource "aws_route53_record" "dkim" {
   for_each = toset(["0", "1", "2"])
 
@@ -50,16 +42,10 @@ resource "aws_route53_record" "dkim" {
   records = ["${aws_ses_domain_dkim.this.dkim_tokens[tonumber(each.value)]}.dkim.amazonses.com"]
 }
 
-# Verifies the recipient. Staying in SES's sandbox is sufficient for one
-# personal recipient -- no need to request production access. Like the
-# SNS subscription in homeserver-health-check, this triggers a one-click
-# confirmation email Terraform can't complete on its own.
 resource "aws_ses_email_identity" "recipient" {
   email = var.alert_email
 }
 
-# Scoped only to sending from this one verified domain -- not account-wide
-# SES access, and not usable for anything but SendEmail/SendRawEmail.
 resource "aws_iam_user" "smtp" {
   name = "ses-relay-smtp"
 
@@ -68,18 +54,9 @@ resource "aws_iam_user" "smtp" {
   }
 }
 
+# Machine credential without console login, so MFA can't apply: see README, "Security scan exceptions".
 #trivy:ignore:AVD-AWS-0123
 resource "aws_iam_group" "smtp" {
-  # Fixes trivy's AWS-0143 (policy attached directly to a user) --
-  # ses-relay-smtp is a single machine credential (SMTP access key), not
-  # a human console user, so this group will only ever have this one
-  # member; the indirection is cheap and clears the finding without
-  # changing the effective permissions.
-  #
-  # AWS-0123 (MFA not enforced) suppressed too: this identity has no
-  # console password or login profile, only the access key doubling as
-  # its SMTP username -- MFA has no session to attach a condition to for
-  # that kind of auth.
   name = "ses-relay-smtp"
 }
 
@@ -87,13 +64,7 @@ resource "aws_iam_group_policy" "smtp" {
   name  = "send-from-verified-domain"
   group = aws_iam_group.smtp.name
 
-  # SES's IAM authorization for SendRawEmail/SendEmail checks the caller
-  # against every identity involved in the send, not just the sending
-  # domain -- since the recipient is also a verified identity in this same
-  # account (required for SES sandbox delivery), a policy scoped to only
-  # the domain identity gets denied with "not authorized ... on resource
-  # identity/<recipient>". Confirmed live: the recipient identity ARN had
-  # to be added here before mail actually sent.
+  # SES authorizes against every identity in a send, so the verified recipient must be listed too.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -116,33 +87,17 @@ resource "aws_iam_group_membership" "smtp" {
   users = [aws_iam_user.smtp.name]
 }
 
-# The access key ID doubles as the SMTP username, used as-is. The secret
-# access key is NOT the SMTP password -- see README's "Deriving the SMTP
-# password" section for the one manual step this can't do on its own,
-# and why that derivation deliberately happens outside Terraform state.
+# The secret key is not the SMTP password: see README, "Deriving the SMTP password".
 resource "aws_iam_access_key" "smtp" {
   user = aws_iam_user.smtp.name
 
-  # create_before_destroy so a future `terraform apply
-  # -replace=aws_iam_access_key.smtp` (the actual rotation mechanic --
-  # this resource has no in-place rotation, only destroy+recreate)
-  # mints the new key before deleting the old one. IAM permits up to 2
-  # access keys per user, so this gives a real overlap window instead
-  # of a moment with zero valid key while Alertmanager/Authelia could
-  # be mid-send. Same fix as KandlerLi/dyndns's acme_dns01 access key
-  # (2026-09-11), applied here for the same reason.
+  # Rotation by -replace mints the new key before the old one goes: see README.
   lifecycle {
     create_before_destroy = true
   }
 }
 
-# Inbound and authentication DNS for the k3s-native Stalwart mail server
-# (KandlerLi/k3s-apps' modules/stalwart), kept here beside the SES records
-# because the SPF policy has to include SES.
-#
-# The MX target is the apex, not mail.<domain>: mail.<domain> is a CNAME
-# (KandlerLi/dyndns's subdomains), and an MX must not point at a CNAME. The
-# apex A record is the one dyndns keeps current with the home IP.
+# Apex, not mail.<domain>: that is a CNAME, and an MX must not point at one.
 resource "aws_route53_record" "mx" {
   zone_id = var.route53_zone_id
   name    = var.domain_name
@@ -151,9 +106,7 @@ resource "aws_route53_record" "mx" {
   records = ["10 ${var.domain_name}."]
 }
 
-# Outbound mail goes through SES; a:mail.<domain> also covers anything the
-# homeserver sends directly (its A record follows the dynamic IP).
-# Soft-fail for now -- tighten to -all once real mail has flowed cleanly.
+# Soft-fail until real mail has flowed cleanly: see README, "Mail DNS for Stalwart".
 resource "aws_route53_record" "spf" {
   zone_id = var.route53_zone_id
   name    = var.domain_name
@@ -162,8 +115,7 @@ resource "aws_route53_record" "spf" {
   records = ["v=spf1 a:mail.${var.domain_name} include:amazonses.com ~all"]
 }
 
-# Monitor-only (p=none) to start: reports go to the mailbox itself, and
-# the policy is raised to quarantine/reject once they look clean.
+# Monitor-only for now: see README, "Mail DNS for Stalwart".
 resource "aws_route53_record" "dmarc" {
   zone_id = var.route53_zone_id
   name    = "_dmarc.${var.domain_name}"
