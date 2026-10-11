@@ -129,7 +129,7 @@ resource "aws_iam_access_key" "smtp" {
   # mints the new key before deleting the old one. IAM permits up to 2
   # access keys per user, so this gives a real overlap window instead
   # of a moment with zero valid key while Alertmanager/Authelia could
-  # be mid-send. Same fix as aws/dyndns's acme_dns01 access key
+  # be mid-send. Same fix as KandlerLi/dyndns's acme_dns01 access key
   # (2026-09-11), applied here for the same reason.
   lifecycle {
     create_before_destroy = true
@@ -137,11 +137,11 @@ resource "aws_iam_access_key" "smtp" {
 }
 
 # Inbound and authentication DNS for the k3s-native Stalwart mail server
-# (infra/k3s-apps' modules/stalwart), kept here beside the SES records
+# (KandlerLi/k3s-apps' modules/stalwart), kept here beside the SES records
 # because the SPF policy has to include SES.
 #
 # The MX target is the apex, not mail.<domain>: mail.<domain> is a CNAME
-# (aws/dyndns's subdomains), and an MX must not point at a CNAME. The
+# (KandlerLi/dyndns's subdomains), and an MX must not point at a CNAME. The
 # apex A record is the one dyndns keeps current with the home IP.
 resource "aws_route53_record" "mx" {
   zone_id = var.route53_zone_id
