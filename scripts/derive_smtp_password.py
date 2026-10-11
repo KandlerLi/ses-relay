@@ -4,8 +4,8 @@
 AWS's own published algorithm (the same one the SES console's "Create SMTP
 credentials" wizard runs internally) -- there is no separate "SMTP secret",
 only this deterministic transform of the IAM secret access key. Run this
-locally with Terraform's smtp_secret_access_key output; never commit the
-result anywhere but SOPS.
+locally with Terraform's smtp_secret_access_key output and store the result
+only in the Secrets Manager secret home-infra/monitoring, never in git.
 
 Usage:
     python3 scripts/derive_smtp_password.py <secret_access_key> [region]
