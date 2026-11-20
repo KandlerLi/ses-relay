@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   terraform:
-    uses: KandlerLi/gha-common/.github/workflows/terraform-apply.yml@v1.0.0
+    uses: KandlerLi/gha-common/.github/workflows/terraform-apply.yml@v1.2.0
     with:
       aws_region: eu-central-1
     secrets: inherit
