@@ -160,8 +160,8 @@ terraform apply
 
 ## Runner
 
-Self-hosted home runner (`[self-hosted, home, debian]`), same as
-`dyndns`/`website`/`aws-budget`/`homeserver-health-check`.
+GitHub-hosted (`ubuntu-latest`), through `gha-common`'s reusable workflows
+since its v2.0.0: nothing here needs the home network.
 
 ## Local validation
 
